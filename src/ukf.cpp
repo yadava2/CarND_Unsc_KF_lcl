@@ -47,13 +47,32 @@ UKF::UKF() {
   std_radrd_ = 0.3;
   //DO NOT MODIFY measurement noise values above these are provided by the sensor manufacturer.
   
-  /**
-  TODO:
+  // State dimension
+  n_x = x_.size();
+  //augmented state dimension
+  n_aug = n_x + 2;
+  // Number of sigma points
+  n_sigma = 2 * n_aug +1;
 
-  Complete the initialization. See ukf.h for other member properties.
+  //predicted sigma point matrix
+  Xsig_predicted = MatrixXd(n_x, n_sigma);
 
-  Hint: one or more values initialized above might be wildly off...
-  */
+  // Sigma point spreading factor
+  lambda = 3 - n_aug;
+  // weights of sigma points
+  weights = VextorXd(n_sigma);
+
+  // Measurement noise covariance
+
+  R_radar = MatrixXd(3, 3);
+  R_radar_ << std_radr_*std_radphi_, 0, 0,
+		  	  0, 0, std_radphi_*std_radphi_,0,
+			  0, 0, std_radrd_;
+  R_lidar_ =MatrixXd(2, 2);
+  R_lidar_ << std_laspx_*std_raspx_,0,
+		  	  0,std_laspy_*std_laspy_;
+
+
 }
 
 UKF::~UKF() {}
@@ -69,6 +88,31 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
+if (!is_initialized){
+	P << 1,0,0,0,0,
+		 0,1,0,0,0,
+		 0,0,1,0,0,
+		 0,0,0,1,0,
+		 0,0,0,0,1;
+	if (measurement_pack.sensor_type == MeasurementPackage::RADAR) {
+		float rho = measurement_pack.raw_measurement[0];
+		float phi = measurement_pack.raw_measurement[1];
+		float rho_dot = measurement_pack.raw_measurement[2];
+		// polar to cartesian
+		float px = rho * cos(phi);
+		float py = rho * sin(phi);
+		float vx = rho_dot * cos(phi);
+		float vy = rho_dot * sin(phi);
+		float v = sqrt(vx*vx + vy*vy);
+		x << px, py, v, 0, 0;
+	}
+	else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER){
+		x << measurement_pack.raw_measurement[0], measurement_pack.raw_measurement[1], 0, 0, 0;
+
+
+	}
+}
+
 }
 
 /**

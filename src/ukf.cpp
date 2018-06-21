@@ -1,6 +1,7 @@
 #include "ukf.h"
 #include "Eigen/Dense"
 #include <iostream>
+#include <math.h>
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -88,12 +89,14 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
-if (!is_initialized){
-	P << 1,0,0,0,0,
-		 0,1,0,0,0,
-		 0,0,1,0,0,
-		 0,0,0,1,0,
-		 0,0,0,0,1;
+	if (!is_initialized){
+		P << 1,0,0,0,0,
+			 0,1,0,0,0,
+			 0,0,1,0,0,
+			 0,0,0,1,0,
+			 0,0,0,0,1;
+
+	// Intialisation for RADAR, for CTRV model x=[px, py, vel, ang, ang_rate]
 	if (measurement_pack.sensor_type == MeasurementPackage::RADAR) {
 		float rho = measurement_pack.raw_measurement[0];
 		float phi = measurement_pack.raw_measurement[1];
@@ -105,13 +108,42 @@ if (!is_initialized){
 		float vy = rho_dot * sin(phi);
 		float v = sqrt(vx*vx + vy*vy);
 		x << px, py, v, 0, 0;
-	}
+	  }
+	// Initialisation for LIDAR
 	else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER){
-		x << measurement_pack.raw_measurement[0], measurement_pack.raw_measurement[1], 0, 0, 0;
+		    x << measurement_pack.raw_measurement[0], measurement_pack.raw_measurement[1], 0, 0, 0;
+	       }
 
+    }
 
+// weights initialisation
+
+	weights(0) = lamda / (lambda + n_aug);
+	for(int i=1; i<weights.size(); i++){
+		weights(i)=0.5/(lambda + n_aug);
 	}
-}
+
+	time_stamp = measuremment_pack.timestamp;
+
+	is_initialized = true;
+
+	return;
+
+// calculation of timestamp
+	double dt = (measurement_pack.timestamp - time_stamp);
+	dt /= 1000000.0;    //converting into seconds
+	time_stamp = measurement_pack.timestamp;
+	Prediction(dt);
+
+	if (measrement_pack.sensor_type == MeasurementPackage::RADAR && use_radar){
+		UpdateRadar(measurement_package);
+	}
+
+	if (measrement_pack.sensor_type == MeasurementPackage::LASER && use_radar){
+			UpdateLidar(measurement_package);
+		}
+
+
 
 }
 
@@ -127,6 +159,35 @@ void UKF::Prediction(double delta_t) {
   Complete this function! Estimate the object's location. Modify the state
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
+	double delta_t_sq =delta_t * delta_t;
+
+	//Augmented mean vector
+	VectorXd x_aug = VectorXd(n_aug);
+
+	//Augmented state covarience matrix
+	MatrixXd P_aug = MatrixXd(n_aug, n_aug);
+
+	//sigma point matrix
+	MatrixXd xsig_aug = Matrixxd(n_aug, n_sig);
+
+	//Initializing the matrices
+	x_aug.fill(0.0);
+	x_aug.head(n_x) = x;
+	P_aug.fill(0);
+	P_aug.topLeftCorner(n_x,n_x) = P;
+	P_aug(5,5) = std_a *std_a;
+	P_aug(6,6) = std_yawdd * std_yadd;
+
+	// square root of P matrix
+
+	MatrixXd L = P_aug.llt().matrixL();
+
+	//Create sigma points
+
+	Xsig_aug.col(0) = x_aug;
+
+
+
 }
 
 /**

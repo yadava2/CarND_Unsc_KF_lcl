@@ -4,8 +4,14 @@
 #include <math.h>
 #include "ukf.h"
 #include "tools.h"
+#include "Eigen/Dense"
+//#include "ground_truth_package.h"
+//#include "measurement_package.h"
 
 using namespace std;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+using std::vector;
 
 // for convenience
 using json = nlohmann::json;

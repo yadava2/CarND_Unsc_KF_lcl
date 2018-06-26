@@ -2,6 +2,9 @@
 #include "Eigen/Dense"
 #include <iostream>
 #include <math.h>
+#include "tools.h"
+
+#define EPS 0.001
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -49,28 +52,28 @@ UKF::UKF() {
   //DO NOT MODIFY measurement noise values above these are provided by the sensor manufacturer.
   
   // State dimension
-  n_x = x_.size();
+  n_x_ = x_.size();
   //augmented state dimension
-  n_aug = n_x + 2;
+  n_aug_ = n_x_ + 2;
   // Number of sigma points
-  n_sigma = 2 * n_aug +1;
+  n_sig_ = 2 * n_aug_ +1;
 
   //predicted sigma point matrix
-  Xsig_predicted = MatrixXd(n_x, n_sigma);
+  Xsig_pred_ = MatrixXd(n_x_, n_sig_);
 
   // Sigma point spreading factor
-  lambda = 3 - n_aug;
+  lambda_ = 3 - n_aug_;
   // weights of sigma points
-  weights = VextorXd(n_sigma);
+  weights_ = VectorXd(n_sig_);
 
   // Measurement noise covariance
 
-  R_radar = MatrixXd(3, 3);
+  R_radar_ = MatrixXd(3, 3);
   R_radar_ << std_radr_*std_radphi_, 0, 0,
 		  	  0, 0, std_radphi_*std_radphi_,0,
 			  0, 0, std_radrd_;
   R_lidar_ =MatrixXd(2, 2);
-  R_lidar_ << std_laspx_*std_raspx_,0,
+  R_lidar_ << std_laspx_*std_laspx_,0,
 		  	  0,std_laspy_*std_laspy_;
 
 
@@ -82,6 +85,14 @@ UKF::~UKF() {}
  * @param {MeasurementPackage} meas_package The latest measurement data of
  * either radar or laser.
  */
+
+//Angle Normalization
+
+void UKF::NormAng(double *ang){
+	while(*ang > M_PI) *ang -= 2. * M_PI;
+	while(*ang < M_PI) *ang += 2. * M_PI;
+}
+
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   /**
   TODO:
@@ -89,63 +100,64 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
-	if (!is_initialized){
-		P << 1,0,0,0,0,
-			 0,1,0,0,0,
-			 0,0,1,0,0,
-			 0,0,0,1,0,
-			 0,0,0,0,1;
+	if (!is_initialized_){
+		P_ << 1,0,0,0,0,
+			  0,1,0,0,0,
+			  0,0,1,0,0,
+			  0,0,0,1,0,
+			  0,0,0,0,1;
 
 	// Intialisation for RADAR, for CTRV model x=[px, py, vel, ang, ang_rate]
-	if (measurement_pack.sensor_type == MeasurementPackage::RADAR) {
-		float rho = measurement_pack.raw_measurement[0];
-		float phi = measurement_pack.raw_measurement[1];
-		float rho_dot = measurement_pack.raw_measurement[2];
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+		float rho = meas_package.raw_measurements_[0];
+		float phi = meas_package.raw_measurements_[1];
+		float rho_dot = meas_package.raw_measurements_[2];
 		// polar to cartesian
 		float px = rho * cos(phi);
 		float py = rho * sin(phi);
 		float vx = rho_dot * cos(phi);
 		float vy = rho_dot * sin(phi);
 		float v = sqrt(vx*vx + vy*vy);
-		x << px, py, v, 0, 0;
+		x_ << px, py, v, 0, 0;
 	  }
 	// Initialisation for LIDAR
-	else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER){
-		    x << measurement_pack.raw_measurement[0], measurement_pack.raw_measurement[1], 0, 0, 0;
+	else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
+		    x_ << meas_package.raw_measurements_[0], meas_package.raw_measurements_[1], 0, 0, 0;
 	       }
 
-    }
+
 
 // weights initialisation
 
-	weights(0) = lamda / (lambda + n_aug);
-	for(int i=1; i<weights.size(); i++){
-		weights(i)=0.5/(lambda + n_aug);
+	weights_(0) = lambda_ / (lambda_ + n_aug_);
+	for(int i=1; i<weights_.size(); i++){
+		weights_(i)=0.5/(lambda_ + n_aug_);
 	}
 
-	time_stamp = measuremment_pack.timestamp;
+	time_us_ = meas_package.timestamp_;
 
-	is_initialized = true;
+	is_initialized_ = true;
 
 	return;
+}
 
 // calculation of timestamp
-	double dt = (measurement_pack.timestamp - time_stamp);
+	double dt = (meas_package.timestamp_ - time_us_);
 	dt /= 1000000.0;    //converting into seconds
-	time_stamp = measurement_pack.timestamp;
+	time_us_ = meas_package.timestamp_;
 	Prediction(dt);
 
-	if (measrement_pack.sensor_type == MeasurementPackage::RADAR && use_radar){
-		UpdateRadar(measurement_package);
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_){
+		UpdateRadar(meas_package);
 	}
 
-	if (measrement_pack.sensor_type == MeasurementPackage::LASER && use_radar){
-			UpdateLidar(measurement_package);
+	if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_){
+			UpdateLidar(meas_package);
 		}
 
-
-
 }
+
+
 
 /**
  * Predicts sigma points, the state, and the state covariance matrix.
@@ -159,24 +171,24 @@ void UKF::Prediction(double delta_t) {
   Complete this function! Estimate the object's location. Modify the state
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
-	double delta_t_sq =delta_t * delta_t;
+	double delta_t2 =delta_t * delta_t;
 
 	//Augmented mean vector
-	VectorXd x_aug = VectorXd(n_aug);
+	VectorXd x_aug = VectorXd(n_aug_);
 
 	//Augmented state covarience matrix
-	MatrixXd P_aug = MatrixXd(n_aug, n_aug);
+	MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
 
 	//sigma point matrix
-	MatrixXd xsig_aug = Matrixxd(n_aug, n_sig);
+	MatrixXd Xsig_aug = MatrixXd(n_aug_, n_sig_);
 
 	//Initializing the matrices
 	x_aug.fill(0.0);
-	x_aug.head(n_x) = x;
+	x_aug.head(n_x_) = x_;
 	P_aug.fill(0);
-	P_aug.topLeftCorner(n_x,n_x) = P;
-	P_aug(5,5) = std_a *std_a;
-	P_aug(6,6) = std_yawdd * std_yadd;
+	P_aug.topLeftCorner(n_x_,n_x_) = P_;
+	P_aug(5,5) = std_a_ *std_a_;
+	P_aug(6,6) = std_yawdd_ * std_yawdd_;
 
 	// square root of P matrix
 
@@ -185,10 +197,89 @@ void UKF::Prediction(double delta_t) {
 	//Create sigma points
 
 	Xsig_aug.col(0) = x_aug;
+	double sqrt_lambda_n_aug = sqrt(lambda_ + n_aug_);
 
+	VectorXd sqrt_lambda_n_aug_L;
+	for(int i=0; i<n_aug_; i++){
+		// multiplication of the A and sqrt_lamda_n_aug
+		sqrt_lambda_n_aug_L = sqrt_lambda_n_aug * L.col(i);
+		Xsig_aug.col(i+1) = x_aug + sqrt_lambda_n_aug_L;
+		Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt_lambda_n_aug_L;
+	}
 
+	// Prediction of Sigma Points
+	for (int i=0; i< n_sig_ ; i++){
+		// Extracting the values from the matrix
+		double p_x = Xsig_aug(0,i);
+		double p_y = Xsig_aug(1,i);
+		double v = Xsig_aug(2,i);
+		double yaw = Xsig_aug(3,i);
+		double yawd = Xsig_aug(4,i);
+		double nu_a = Xsig_aug(5,i);   //augmented variables
+		double nu_yawdd = Xsig_aug(6,i);
+
+		// Calculating sin and cos optimizations
+		double sin_yaw = sin(yaw);
+		double cos_yaw = cos(yaw);
+		double arg = yaw + yawd*delta_t;
+
+		// state Values
+
+		double px_p, py_p;
+		// Avoid division by zero
+
+		if (fabs(yawd)> EPS){
+			double v_yawd = v/yawd;
+			px_p = p_x + v_yawd * (sin(arg) - sin_yaw);
+			px_p = p_y + v_yawd * (cos_yaw - cos(arg));
+		}
+		else {
+			double v_delta_t = v*delta_t;
+			px_p = p_x + v_delta_t*cos_yaw;
+			px_p = p_x + v_delta_t*sin_yaw;
+
+		}
+
+		double v_p = v;
+		double yaw_p = arg;
+		double yawd_p= yawd;
+
+		// adding noise
+
+		px_p += 0.5*nu_a*delta_t2*cos_yaw;
+		py_p += 0.5*nu_a*delta_t2*sin_yaw;
+		v_p += nu_a*delta_t;
+		yaw_p += 0.5*nu_yawdd*delta_t2;
+		yawd_p += nu_yawdd*delta_t;
+
+		// Writing the sigma points
+
+		Xsig_pred_(0,i) = px_p;
+		Xsig_pred_(1,i) = py_p;
+		Xsig_pred_(2,i) = v_p;
+		Xsig_pred_(3,i) = yaw_p;
+		Xsig_pred_(4,i) = yawd_p;
+
+	}
+
+	//Prediction of Mean and covariance
+
+	//Mean
+
+	x_ = Xsig_pred_ * weights_;
+
+	// Covariance
+
+	P_.fill(0.0);
+	for(int i=0; i< n_sig_; i++){
+		VectorXd x_diff = Xsig_pred_.col(i) - x_;
+		//angle normalization
+		NormAng(&(x_diff(3)));
+		P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
+	}
 
 }
+
 
 /**
  * Updates the state and the state covariance matrix using a laser measurement.
@@ -203,6 +294,12 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+	int n_z = 2;
+		MatrixXd Zsig = Xsig_pred_.block(0, 0, n_z, n_sig_);
+		UpdateUKF(meas_package, Zsig, n_z);
+
+
+
 }
 
 /**
@@ -218,4 +315,93 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the radar NIS.
   */
+		// measurement dimension
+		int n_z=3;
+
+		//sigma point matrix
+		MatrixXd Zsig = MatrixXd(n_z, n_sig_);
+
+		//transforming sigma points into measurement space
+		for(int i=0; i<n_sig_; i++){
+			double p_x = Xsig_pred_(0,i);
+			double p_y = Xsig_pred_(1,i);
+			double v = Xsig_pred_(2,i);
+			double yaw = Xsig_pred_(3,i);
+			double v1 = cos(yaw)*v;
+			double v2 = sin(yaw)*v;
+			// Measurement model
+			Zsig(0,i) = sqrt(p_x*p_x + p_y*p_y);
+			Zsig(1,i) = atan2(p_y,p_x);
+			Zsig(2,i) = (p_x*v1 + p_y*v2)/ Zsig(0,i);
+		}
+		UpdateUKF(meas_package, Zsig, n_z);
 }
+
+void UKF::UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z){
+	// Mean prediction measurement
+	VectorXd z_pred = VectorXd(n_z);
+	z_pred = Zsig * weights_;
+	// S : Measurement Covariance Matrix
+	MatrixXd S = MatrixXd(n_z, n_z);
+	S.fill(0.0);
+	for(int i=0; i < n_sig_; i++){
+		VectorXd z_diff = Zsig.col(i) - z_pred;
+		// angle normalization
+		NormAng(&(z_diff(1)));
+		S = S + weights_(i) * z_diff *z_diff.transpose();
+	}
+
+	//Adding Measurement Noise Covariance Matrix
+	MatrixXd R =  MatrixXd(n_z, n_z);
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR){
+		R=R_radar_;
+	}
+	else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
+		R=R_lidar_;
+}
+	S=S+R;
+
+	//Cross Corelation Tc
+
+	MatrixXd Tc = MatrixXd(n_x_,n_z);
+	Tc.fill(0.0);
+
+	for(int i=0; i < n_sig_; i++){
+		VectorXd z_diff = Zsig.col(i) - z_pred;
+		if(meas_package.sensor_type_ == MeasurementPackage::RADAR){
+			// Angle normalization
+			NormAng(&(z_diff(1)));
+		}
+		// State Difference
+		VectorXd x_diff = Xsig_pred_.col(i) - x_;
+		// Angle normalization
+		NormAng(&(x_diff(3)));
+		Tc = Tc + weights_(i) * x_diff *z_diff.transpose();
+		}
+	//Measurement
+	VectorXd z = meas_package.raw_measurements_;
+	//Kalman Gain
+	MatrixXd K = Tc * S.inverse();
+	//Residual
+	VectorXd z_diff = z - z_pred;
+	if (meas_package.sensor_type_ == MeasurementPackage::RADAR){
+		// Angle Normalization
+		NormAng(&(z_diff(1)));
+	}
+
+	//Updating state mean and covariance matrix
+	x_ = x_ + K*z_diff;
+	P_ = P_ - K * S * K.transpose();
+	// Calculating Normalized Innovation Squared
+	if(meas_package.sensor_type_ == MeasurementPackage::RADAR){
+		NIS_radar_ = z.transpose() * S.inverse() * z;
+	}
+	else if(meas_package.sensor_type_ == MeasurementPackage::LASER){
+			NIS_laser_ = z.transpose() * S.inverse() * z;
+		}
+
+
+ }
+
+
+

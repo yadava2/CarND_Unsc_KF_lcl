@@ -176,6 +176,8 @@ void UKF::Prediction(double delta_t) {
   */
 	double delta_t2 =delta_t * delta_t;
 
+	//1. Generating Sigma Points
+
 	//Augmented mean vector
 	VectorXd x_aug = VectorXd(n_aug_);
 
@@ -211,8 +213,9 @@ void UKF::Prediction(double delta_t) {
 	}
 
 	// Prediction of Sigma Points
-	for (int i=0; i< n_sig_ ; i++){
-		// Extracting the values from the matrix
+	for (int i=0; i< n_sig_ ; i++)
+	{
+		// Extracting the values for better readability
 		double p_x = Xsig_aug(0,i);
 		double p_y = Xsig_aug(1,i);
 		double v = Xsig_aug(2,i);
@@ -330,6 +333,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 			double p_y = Xsig_pred_(1,i);
 			double v = Xsig_pred_(2,i);
 			double yaw = Xsig_pred_(3,i);
+
 			double v1 = cos(yaw)*v;
 			double v2 = sin(yaw)*v;
 			// Measurement model
@@ -341,13 +345,17 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 }
 
 void UKF::UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z){
+
+	//1. Predict Measurement
 	// Mean prediction measurement
 	VectorXd z_pred = VectorXd(n_z);
 	z_pred = Zsig * weights_;
+
 	// S : Measurement Covariance Matrix
 	MatrixXd S = MatrixXd(n_z, n_z);
 	S.fill(0.0);
 	for(int i=0; i < n_sig_; i++){
+		// residual
 		VectorXd z_diff = Zsig.col(i) - z_pred;
 		// angle normalization
 		NormAng(&(z_diff(1)));
@@ -362,7 +370,13 @@ void UKF::UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z){
 	else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
 		R=R_lidar_;
 }
+	// add measurement noise covariance matrix
 	S=S+R;
+
+	//2. Update State
+
+	//Incoming Measurement
+		VectorXd z = meas_package.raw_measurements_;
 
 	//Cross Corelation Tc
 
@@ -381,10 +395,10 @@ void UKF::UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z){
 		NormAng(&(x_diff(3)));
 		Tc = Tc + weights_(i) * x_diff *z_diff.transpose();
 		}
-	//Measurement
-	VectorXd z = meas_package.raw_measurements_;
+
 	//Kalman Gain
 	MatrixXd K = Tc * S.inverse();
+
 	//Residual
 	VectorXd z_diff = z - z_pred;
 	if (meas_package.sensor_type_ == MeasurementPackage::RADAR){

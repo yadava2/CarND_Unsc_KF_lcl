@@ -64,11 +64,17 @@ public:
   ///* Augmented state dimension
   int n_aug_;
 
-  ///* Number of sigma points
-  int n_sig_;
-
   ///* Sigma point spreading parameter
   double lambda_;
+
+  ///* Sigma points dimension
+  int n_sig_;
+
+  ///* Radar measurement noise covariance matrix
+  MatrixXd R_radar_;
+
+  ///* Lidar measurement noise covariance matrix
+  MatrixXd R_lidar_;
 
   ///* the current NIS for radar
   double NIS_radar_;
@@ -76,11 +82,7 @@ public:
   ///* the current NIS for laser
   double NIS_laser_;
 
-  ///* Radar Measurement noise covariance matrix
-  MatrixXd R_radar_;
 
-  ///* Lidar measurement noise convariance matrix
-  MatrixXd R_lidar_;
   /**
    * Constructor
    */
@@ -95,10 +97,6 @@ public:
    * ProcessMeasurement
    * @param meas_package The latest measurement data of either radar or laser
    */
-
-  void NormAng(double *ang);
-
-
   void ProcessMeasurement(MeasurementPackage meas_package);
 
   /**
@@ -119,6 +117,12 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+  MatrixXd GenerateSigmaPoints(VectorXd x, MatrixXd P, double lambda, int n_sig);
+
+  MatrixXd PredictSigmaPoints(MatrixXd Xsig, double delta_t, int n_x, int n_sig, double nu_am, double nu_yawdd);
+
+  void NormAng(double *ang);
 
   void UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z);
 };

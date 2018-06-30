@@ -53,8 +53,10 @@ UKF::UKF() {
   
   // State dimension
   n_x_ = x_.size();
+
   //augmented state dimension
   n_aug_ = n_x_ + 2;
+
   // Number of sigma points
   n_sig_ = 2 * n_aug_ +1;
 
@@ -63,14 +65,15 @@ UKF::UKF() {
 
   // Sigma point spreading factor
   lambda_ = 3 - n_aug_;
+
   // weights of sigma points
   weights_ = VectorXd(n_sig_);
 
   // Measurement noise covariance
 
   R_radar_ = MatrixXd(3, 3);
-  R_radar_ << std_radr_*std_radphi_, 0, 0,
-		  	  0, 0, std_radphi_*std_radphi_,0,
+  R_radar_ << std_radr_*std_radr_, 0, 0,
+		  	  0, std_radphi_*std_radphi_, 0,
 			  0, 0, std_radrd_;
   R_lidar_ =MatrixXd(2, 2);
   R_lidar_ << std_laspx_*std_laspx_,0,

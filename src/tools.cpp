@@ -15,9 +15,10 @@ VectorXd Tools::CalculateRMSE(const vector<VectorXd> &estimations,
 	rmse << 0,0,0,0;
 	// checking validity of inputs
 	if(estimations.size() == 0){
-		cout << "Input is empty"<<endl;
+		cout << "The estimations vector is empty"<<endl;
 		return rmse;
 	}
+
 	// The estimation vector size should equal ground truth vector size
 	if(estimations.size() != ground_truth.size()){
 		cout<<"Invalid estimation or ground truth";

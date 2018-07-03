@@ -11,6 +11,31 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 class UKF {
+private:
+  /**
+   *   Generate sigma points:
+   *  @param x : State vector.
+   *  @param P : Covariance matrix.
+   *  @param lambda: Sigma points spreading parameter.
+   *  @param n_sig: Sigma points dimension.
+   */
+  MatrixXd GenerateSigmaPoints(VectorXd x, MatrixXd P, double lambda, int n_sig);
+
+  /**
+   * Predits sigma points.
+   * @param Xsig : Sigma points to predict.
+   * @param delta_t : Time between k and k+1 in s
+   * @param n_x : State dimension.
+   * @param n_sig : Sigma points dimension.
+   * @param nu_am : Process noise standard deviation longitudinal acceleration in m/s^2
+   * @param nu_yawdd : Process noise standard deviation yaw acceleration in rad/s^2
+   */
+  MatrixXd PredictSigmaPoints(MatrixXd Xsig, double delta_t, int n_x, int n_sig, double nu_am, double nu_yawdd);
+
+  /**
+   *  Normalized the component `index` of the vector `vector` to be inside [-M_PI, M_PI] interval.
+   */
+  void NormalizeAngleOnComponent(VectorXd vector, int index);
 public:
 
   ///* initially set to false, set to true in first call of ProcessMeasurement
@@ -117,10 +142,6 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
-
-  void NormAng(double *ang);
-
-  void UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z);
 };
 
 #endif /* UKF_H */

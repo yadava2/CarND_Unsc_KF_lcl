@@ -171,9 +171,80 @@ void UKF::Prediction(double delta_t) {
   P_aug(6,6) = std_yawdd_*std_yawdd_;
 
   // Creating sigma points.
-  MatrixXd Xsig_aug = GenerateSigmaPoints(x_aug, P_aug, lambda_, n_sig_);
-  // 2. Predict Sigma Points.
-  Xsig_pred_ = PredictSigmaPoints(Xsig_aug, delta_t, n_x_, n_sig_, std_a_, std_yawdd_);
+  MatrixXd Xsig_aug;
+
+  int n = x_aug.size();
+    //create sigma point matrix
+  MatrixXd Xsig = MatrixXd( n, n_sig_ );
+
+    //calculate square root of P
+  MatrixXd A = P_aug.llt().matrixL();
+
+  Xsig.col(0) = x_aug;
+
+  double lambda_plue_n_x_sqrt = sqrt(lambda_ + n_aug_);
+  VectorXd RSLambdaA;
+  for (int i = 0; i < n_aug_; ++i){
+	  RSLambdaA = lambda_plue_n_x_sqrt * A.col(i);
+	      Xsig.col(i + 1)          = x_aug + RSLambdaA;
+	      Xsig.col(i + 1 + n_aug_) = x_aug - RSLambdaA;
+	    }
+
+   Xsig_aug = Xsig;
+
+    // 2. Predict Sigma Points.
+
+
+	MatrixXd Xsig_pred = MatrixXd(n_x_, n_sig_);
+    //predict sigma points
+    for (int i = 0; i< n_sig_; i++)
+    {
+      //extract values for better readability
+      double p_x = Xsig_aug(0,i);
+      double p_y = Xsig_aug(1,i);
+      double v = Xsig_aug(2,i);
+      double yaw = Xsig_aug(3,i);
+      double yawd = Xsig_aug(4,i);
+      double nu_a = Xsig_aug(5,i);
+      double nu_yawdd = Xsig_aug(6,i);
+
+      //predicted state values
+      double px_p, py_p;
+
+      //avoid division by zero
+      if (fabs(yawd) > EPS) {
+          px_p = p_x + v/yawd * ( sin (yaw + yawd*delta_t) - sin(yaw));
+          py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw+yawd*delta_t) );
+      }
+      else {
+          px_p = p_x + v*delta_t*cos(yaw);
+          py_p = p_y + v*delta_t*sin(yaw);
+      }
+
+      double v_p = v;
+      double yaw_p = yaw + yawd*delta_t;
+      double yawd_p = yawd;
+
+      //add noise
+      px_p = px_p + 0.5*nu_a*delta_t*delta_t * cos(yaw);
+      py_p = py_p + 0.5*nu_a*delta_t*delta_t * sin(yaw);
+      v_p = v_p + nu_a*delta_t;
+
+      yaw_p = yaw_p + 0.5*nu_yawdd*delta_t*delta_t;
+      yawd_p = yawd_p + nu_yawdd*delta_t;
+
+      //write predicted sigma point into right column
+      Xsig_pred(0,i) = px_p;
+      Xsig_pred(1,i) = py_p;
+      Xsig_pred(2,i) = v_p;
+      Xsig_pred(3,i) = yaw_p;
+      Xsig_pred(4,i) = yawd_p;
+    }
+
+    Xsig_pred_ = Xsig_pred;
+
+
+
   // 3. Predict Mean and Covariance
   //predicted state mean
   x_ = Xsig_pred_ * weights_;
@@ -333,87 +404,3 @@ void UKF::UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z){
 
  }
 
-
-/**
- * Predits sigma points.
- * @param Xsig : Sigma points to predict.
- * @param delta_t : Time between k and k+1 in s
- * @param n_x : State dimension.
- * @param n_sig : Sigma points dimension.
- * @param nu_am : Process noise standard deviation longitudinal acceleration in m/s^2
- * @param nu_yawdd : Process noise standard deviation yaw acceleration in rad/s^2
- */
-MatrixXd UKF::PredictSigmaPoints(MatrixXd Xsig, double delta_t, int n_x, int n_sig, double nu_am, double nu_yawdd) {
-  MatrixXd Xsig_pred = MatrixXd(n_x, n_sig);
-  //predict sigma points
-  for (int i = 0; i< n_sig; i++)
-  {
-    //extract values for better readability
-    double p_x = Xsig(0,i);
-    double p_y = Xsig(1,i);
-    double v = Xsig(2,i);
-    double yaw = Xsig(3,i);
-    double yawd = Xsig(4,i);
-    double nu_a = Xsig(5,i);
-    double nu_yawdd = Xsig(6,i);
-
-    //predicted state values
-    double px_p, py_p;
-
-    //avoid division by zero
-    if (fabs(yawd) > EPS) {
-        px_p = p_x + v/yawd * ( sin (yaw + yawd*delta_t) - sin(yaw));
-        py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw+yawd*delta_t) );
-    }
-    else {
-        px_p = p_x + v*delta_t*cos(yaw);
-        py_p = p_y + v*delta_t*sin(yaw);
-    }
-
-    double v_p = v;
-    double yaw_p = yaw + yawd*delta_t;
-    double yawd_p = yawd;
-
-    //add noise
-    px_p = px_p + 0.5*nu_a*delta_t*delta_t * cos(yaw);
-    py_p = py_p + 0.5*nu_a*delta_t*delta_t * sin(yaw);
-    v_p = v_p + nu_a*delta_t;
-
-    yaw_p = yaw_p + 0.5*nu_yawdd*delta_t*delta_t;
-    yawd_p = yawd_p + nu_yawdd*delta_t;
-
-    //write predicted sigma point into right column
-    Xsig_pred(0,i) = px_p;
-    Xsig_pred(1,i) = py_p;
-    Xsig_pred(2,i) = v_p;
-    Xsig_pred(3,i) = yaw_p;
-    Xsig_pred(4,i) = yawd_p;
-  }
-
-  return Xsig_pred;
-}
-
-/**
- *   Generate sigma points:
- *  @param x : State vector.
- *  @param P : Covariance matrix.
- *  @param lambda: Sigma points spreading parameter.
- *  @param n_sig: Sigma points dimension.
- */
-MatrixXd UKF::GenerateSigmaPoints(VectorXd x, MatrixXd P, double lambda, int n_sig) {
-  int n = x.size();
-  //create sigma point matrix
-  MatrixXd Xsig = MatrixXd( n, n_sig );
-
-  //calculate square root of P
-  MatrixXd A = P.llt().matrixL();
-
-  Xsig.col(0) = x;
-
-  double lambda_plue_n_x_sqrt = sqrt(lambda + n);
-  for (int i = 0; i < n; i++){
-      Xsig.col( i + 1 ) = x + lambda_plue_n_x_sqrt * A.col(i);
-      Xsig.col( i + 1 + n ) = x - lambda_plue_n_x_sqrt * A.col(i);
-  }
-  return Xsig;
-}

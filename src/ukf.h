@@ -118,10 +118,6 @@ public:
    */
   void UpdateRadar(MeasurementPackage meas_package);
 
-  MatrixXd GenerateSigmaPoints(VectorXd x, MatrixXd P, double lambda, int n_sig);
-
-  MatrixXd PredictSigmaPoints(MatrixXd Xsig, double delta_t, int n_x, int n_sig, double nu_am, double nu_yawdd);
-
   void NormAng(double *ang);
 
   void UpdateUKF(MeasurementPackage meas_package, MatrixXd Zsig, int n_z);
